@@ -6,7 +6,20 @@ const conflictCodes = new Set([
   "PRINTER_HAS_ACTIVE_PRINT",
   "PRINTER_ALREADY_PRINTING",
   "PRINTER_IN_MAINTENANCE",
-  "PRINTER_INACTIVE"
+  "PRINTER_INACTIVE",
+  "ORDER_CODE_ALREADY_EXISTS",
+  "ORDER_ALREADY_DELIVERED",
+  "ORDER_ALREADY_CANCELLED",
+  "ORDER_INACTIVE",
+  "ORDER_PRINT_ALREADY_LINKED",
+  "ORDER_CANNOT_BE_DELIVERED_UNLESS_READY",
+  "ORDER_CANNOT_BE_DELETED_WHEN_DELIVERED",
+  "PRINT_JOB_ORDER_NOT_AVAILABLE",
+  "PRINT_JOB_INACTIVE",
+  "PRINT_JOB_CANNOT_BE_CHANGED",
+  "PRINT_JOB_CANNOT_BE_CANCELLED",
+  "PRINT_JOB_CANNOT_BE_FINISHED",
+  "PRINT_JOB_CANNOT_BE_DELETED_WHEN_RUNNING"
 ]);
 
 const badRequestCodes = new Set([
@@ -14,36 +27,57 @@ const badRequestCodes = new Set([
   "PRINTER_INVALID_STATUS",
   "PRINTER_INVALID_IP",
   "PRINTER_MODEL_INVALID",
-  "PRINTER_LOCATION_INVALID"
+  "PRINTER_LOCATION_INVALID",
+  "ORDER_CODE_REQUIRED",
+  "ORDER_INVALID_STATUS",
+  "ORDER_CUSTOMER_NAME_INVALID",
+  "ORDER_OBSERVATIONS_INVALID",
+  "ORDER_ESTIMATED_DELIVERY_DATE_INVALID",
+  "ORDER_PRINT_JOB_ID_REQUIRED",
+  "PRINT_JOB_MODEL_NAME_REQUIRED",
+  "PRINT_JOB_MODEL_FIELD_INVALID",
+  "PRINT_JOB_ESTIMATED_DURATION_INVALID",
+  "PRINT_JOB_OBSERVATIONS_INVALID",
+  "PRINT_JOB_ORDER_ID_REQUIRED",
+  "PRINT_JOB_INVALID_STATUS"
+]);
+
+const notFoundCodes = new Set([
+  "PRINTER_NOT_FOUND",
+  "ORDER_NOT_FOUND",
+  "ORDER_PRINT_NOT_FOUND",
+  "ORDER_PRINT_LINK_NOT_FOUND",
+  "PRINT_JOB_NOT_FOUND"
 ]);
 
 export function mapErrorToHttp(error: unknown): { status: number; body: unknown } {
   if (error instanceof BusinessError) {
-    if (error.code === "PRINTER_NOT_FOUND") {
-      return { status: 404, body: { code: error.code, message: error.message } };
+    if (notFoundCodes.has(error.code)) {
+      return { status: 404, body: errorBody(error.code, error.message) };
     }
 
     if (conflictCodes.has(error.code)) {
-      return { status: 409, body: { code: error.code, message: error.message } };
+      return { status: 409, body: errorBody(error.code, error.message) };
     }
 
     if (badRequestCodes.has(error.code)) {
-      return { status: 400, body: { code: error.code, message: error.message } };
+      return { status: 400, body: errorBody(error.code, error.message) };
     }
   }
 
   if (error instanceof ZodError) {
     return {
       status: 400,
-      body: {
-        code: "VALIDATION_ERROR",
-        issues: error.issues.map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message
-        }))
-      }
+      body: errorBody(
+        "VALIDATION_ERROR",
+        error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")
+      )
     };
   }
 
-  return { status: 500, body: { code: "INTERNAL_SERVER_ERROR" } };
+  return { status: 500, body: errorBody("INTERNAL_SERVER_ERROR", "Internal server error.") };
+}
+
+function errorBody(code: string, message: string): { error: { code: string; message: string } } {
+  return { error: { code, message } };
 }

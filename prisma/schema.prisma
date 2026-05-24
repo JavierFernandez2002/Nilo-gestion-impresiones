@@ -13,6 +13,21 @@ enum PrinterStatus {
   MANTENIMIENTO
 }
 
+enum OrderStatus {
+  PENDIENTE
+  INCOMPLETO
+  LISTO_EN_TALLER
+  ENTREGADO
+  CANCELADO
+}
+
+enum PrintJobStatus {
+  PENDIENTE
+  CORRIENDO
+  FINALIZADA
+  CANCELADA
+}
+
 model Printer {
   id             String        @id @default(uuid())
   name           String
@@ -27,5 +42,64 @@ model Printer {
 
   @@index([active])
   @@index([normalizedName])
+  @@index([status])
+}
+
+model Order {
+  id                    String       @id @default(uuid())
+  orderCode             String
+  normalizedOrderCode   String
+  customerName          String?
+  status                OrderStatus  @default(PENDIENTE)
+  progressPercentage    Int          @default(0)
+  estimatedDeliveryDate DateTime?
+  deliveredAt           DateTime?
+  cancelledAt           DateTime?
+  observations          String?
+  active                Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  prints                OrderPrint[]
+
+  @@index([active])
+  @@index([normalizedOrderCode])
+  @@index([status])
+}
+
+model OrderPrint {
+  id         String   @id @default(uuid())
+  orderId    String
+  printJobId String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  printJob PrintJob @relation(fields: [printJobId], references: [id])
+
+  @@index([orderId])
+  @@index([printJobId])
+  @@index([active])
+  @@unique([printJobId, active])
+}
+
+model PrintJob {
+  id                     String         @id @default(uuid())
+  modelName              String
+  modelCode              String?
+  material               String?
+  color                  String?
+  estimatedDurationHours Float?
+  status                 PrintJobStatus @default(PENDIENTE)
+  startedAt              DateTime?
+  finishedAt             DateTime?
+  cancelledAt            DateTime?
+  observations           String?
+  active                 Boolean        @default(true)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  orderLinks             OrderPrint[]
+
+  @@index([active])
   @@index([status])
 }
