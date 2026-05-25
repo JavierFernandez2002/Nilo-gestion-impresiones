@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import { CreatePrintJobData, UpdatePrintJobData } from "../domain/print-jobs/print-job.js";
-import { createPrintJobSchema, listPrintJobsQuerySchema, updatePrintJobSchema } from "../schemas/print-job.schemas.js";
+import {
+  assignPrinterSchema,
+  createPrintJobSchema,
+  listPrintJobsQuerySchema,
+  updatePrintJobSchema
+} from "../schemas/print-job.schemas.js";
 import { PrintJobService } from "../services/print-job.service.js";
 
 export class PrintJobController {
@@ -26,6 +31,12 @@ export class PrintJobController {
   update = async (request: Request, response: Response): Promise<void> => {
     const input = updatePrintJobSchema.parse(request.body);
     const printJob = await this.printJobService.update(getParam(request, "id"), input as UpdatePrintJobData);
+    response.json({ data: printJob });
+  };
+
+  assignPrinter = async (request: Request, response: Response): Promise<void> => {
+    const input = assignPrinterSchema.parse(request.body);
+    const printJob = await this.printJobService.assignPrinter(getParam(request, "id"), input.printerId);
     response.json({ data: printJob });
   };
 

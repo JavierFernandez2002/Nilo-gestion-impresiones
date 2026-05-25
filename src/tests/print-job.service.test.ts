@@ -8,6 +8,10 @@ import { OrderService } from "../services/order.service.js";
 import { PrintJobService } from "../services/print-job.service.js";
 import { InMemoryOrderRepository } from "./fakes/in-memory-order.repository.js";
 import { InMemoryPrintJobRepository } from "./fakes/in-memory-print-job.repository.js";
+import { Printer } from "../domain/printers/printer.js";
+import { normalizePrinterName } from "../domain/printers/printer-rules.js";
+import { InMemoryPrinterRepository } from "./fakes/in-memory-printer.repository.js";
+import { PrinterService } from "../services/printer.service.js";
 
 function makeOrder(overrides: Partial<Order> = {}): Order {
   const now = new Date();
@@ -35,6 +39,7 @@ function makePrintJob(overrides: Partial<PrintJob> = {}): PrintJob {
 
   return {
     id: overrides.id ?? "print-1",
+    printerId: overrides.printerId ?? null,
     modelName: overrides.modelName ?? "Soporte",
     modelCode: overrides.modelCode ?? null,
     material: overrides.material ?? null,
@@ -45,6 +50,24 @@ function makePrintJob(overrides: Partial<PrintJob> = {}): PrintJob {
     finishedAt: overrides.finishedAt ?? null,
     cancelledAt: overrides.cancelledAt ?? null,
     observations: overrides.observations ?? null,
+    active: overrides.active ?? true,
+    createdAt: overrides.createdAt ?? now,
+    updatedAt: overrides.updatedAt ?? now
+  };
+}
+
+function makePrinter(overrides: Partial<Printer> = {}): Printer {
+  const now = new Date();
+  const name = overrides.name ?? "Nilo 01";
+
+  return {
+    id: overrides.id ?? "printer-1",
+    name,
+    normalizedName: overrides.normalizedName ?? normalizePrinterName(name),
+    status: overrides.status ?? "LISTA",
+    model: overrides.model ?? null,
+    location: overrides.location ?? null,
+    ipWifi: overrides.ipWifi ?? null,
     active: overrides.active ?? true,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now
@@ -72,10 +95,18 @@ function makeService(
   orders: Order[] = [makeOrder()],
   printJobs: PrintJob[] = [],
   orderPrints: OrderPrint[] = [],
-  statuses: Record<string, string | null> = {}
-): { service: PrintJobService; orderRepository: InMemoryOrderRepository } {
+  statuses: Record<string, string | null> = {},
+  printers: Printer[] = [makePrinter()]
+): {
+  service: PrintJobService;
+  orderRepository: InMemoryOrderRepository;
+  printerRepository: InMemoryPrinterRepository;
+  printerService: PrinterService;
+} {
   const orderRepository = new InMemoryOrderRepository(orders, orderPrints, statuses);
   const orderService = new OrderService(orderRepository);
+  const printerRepository = new InMemoryPrinterRepository(printers);
+  const printerService = new PrinterService(printerRepository);
   const printJobRepository = new InMemoryPrintJobRepository(printJobs, orderPrints, {
     onCreateOrderPrint: async (data) => {
       await orderRepository.createPrint(data);
@@ -86,10 +117,18 @@ function makeService(
     },
     onStatusChange: (printJobId, status) => {
       orderRepository.setPrintStatus(printJobId, status);
+    },
+    onReleasePrinter: async (printerId, status) => {
+      await printerRepository.update(printerId, { status });
     }
   });
 
-  return { service: new PrintJobService(printJobRepository, orderService), orderRepository };
+  return {
+    service: new PrintJobService(printJobRepository, orderService, printerService),
+    orderRepository,
+    printerRepository,
+    printerService
+  };
 }
 
 describe("PrintJobService", () => {
@@ -166,11 +205,74 @@ describe("PrintJobService", () => {
     );
   });
 
+  it("assigns a ready printer to a pending print job and marks it running", async () => {
+    const printers = [makePrinter({ id: "printer-1", status: "LISTA" })];
+    const { service, orderRepository } = makeService(
+      [makeOrder({ status: "PENDIENTE", progressPercentage: 0 })],
+      [makePrintJob({ id: "print-1" })],
+      [makeOrderPrint({ id: "link-1", printJobId: "print-1" })],
+      { "print-1": "PENDIENTE" },
+      printers
+    );
+
+    const assigned = await service.assignPrinter("print-1", "printer-1");
+    const order = await orderRepository.findById("order-1");
+
+    expect(assigned.printerId).toBe("printer-1");
+    expect(assigned.status).toBe("CORRIENDO");
+    expect(assigned.startedAt).toBeInstanceOf(Date);
+    expect(order?.status).toBe("PENDIENTE");
+    expect(order?.progressPercentage).toBe(0);
+  });
+
+  it("rejects assigning unavailable printers or non-pending jobs", async () => {
+    await expectBusinessError(
+      () =>
+        makeService(
+          [makeOrder()],
+          [makePrintJob({ id: "print-1" })],
+          [makeOrderPrint({ id: "link-1", printJobId: "print-1" })],
+          { "print-1": "PENDIENTE" },
+          [makePrinter({ id: "printer-1", status: "IMPRIMIENDO" })]
+        ).service.assignPrinter("print-1", "printer-1"),
+      "PRINTER_ALREADY_PRINTING"
+    );
+
+    await expectBusinessError(
+      () =>
+        makeService(
+          [makeOrder()],
+          [makePrintJob({ id: "print-1", status: "CORRIENDO" })],
+          [makeOrderPrint({ id: "link-1", printJobId: "print-1" })],
+          { "print-1": "CORRIENDO" },
+          [makePrinter({ id: "printer-1", status: "LISTA" })]
+        ).service.assignPrinter("print-1", "printer-1"),
+      "PRINT_JOB_CANNOT_BE_ASSIGNED"
+    );
+  });
+
+  it("rejects assigning a pending print job to a maintenance printer", async () => {
+    await expectBusinessError(
+      () =>
+        makeService(
+          [makeOrder()],
+          [makePrintJob({ id: "print-1" })],
+          [makeOrderPrint({ id: "link-1", printJobId: "print-1" })],
+          { "print-1": "PENDIENTE" },
+          [makePrinter({ id: "printer-1", status: "MANTENIMIENTO" })]
+        ).service.assignPrinter("print-1", "printer-1"),
+      "PRINTER_IN_MAINTENANCE"
+    );
+  });
+
   it("cancels pending and running print jobs, then recalculates order progress", async () => {
     const links = [makeOrderPrint({ id: "link-1", printJobId: "print-1" }), makeOrderPrint({ id: "link-2", printJobId: "print-2" })];
     const { service, orderRepository } = makeService(
       [makeOrder({ status: "INCOMPLETO", progressPercentage: 50 })],
-      [makePrintJob({ id: "print-1", status: "CORRIENDO" }), makePrintJob({ id: "print-2", status: "FINALIZADA" })],
+      [
+        makePrintJob({ id: "print-1", status: "CORRIENDO", printerId: "printer-1" }),
+        makePrintJob({ id: "print-2", status: "FINALIZADA" })
+      ],
       links,
       { "print-1": "CORRIENDO", "print-2": "FINALIZADA" }
     );
@@ -180,6 +282,7 @@ describe("PrintJobService", () => {
 
     expect(cancelled.status).toBe("CANCELADA");
     expect(cancelled.cancelledAt).toBeInstanceOf(Date);
+    expect(cancelled.printerId).toBeNull();
     expect(order?.status).toBe("LISTO_EN_TALLER");
     expect(order?.progressPercentage).toBe(100);
 
@@ -190,7 +293,10 @@ describe("PrintJobService", () => {
     const links = [makeOrderPrint({ id: "link-1", printJobId: "print-1" }), makeOrderPrint({ id: "link-2", printJobId: "print-2" })];
     const { service, orderRepository } = makeService(
       [makeOrder()],
-      [makePrintJob({ id: "print-1", status: "CORRIENDO" }), makePrintJob({ id: "print-2", status: "PENDIENTE" })],
+      [
+        makePrintJob({ id: "print-1", status: "CORRIENDO", printerId: "printer-1" }),
+        makePrintJob({ id: "print-2", status: "PENDIENTE" })
+      ],
       links,
       { "print-1": "CORRIENDO", "print-2": "PENDIENTE" }
     );
@@ -200,10 +306,29 @@ describe("PrintJobService", () => {
 
     expect(finished.status).toBe("FINALIZADA");
     expect(finished.finishedAt).toBeInstanceOf(Date);
+    expect(finished.printerId).toBeNull();
     expect(order?.status).toBe("INCOMPLETO");
     expect(order?.progressPercentage).toBe(50);
 
     await expectBusinessError(() => service.finish("print-2"), "PRINT_JOB_CANNOT_BE_FINISHED");
+  });
+
+  it("allows maintenance only after an active print is resolved", async () => {
+    const { service, printerRepository, printerService } = makeService(
+      [makeOrder()],
+      [makePrintJob({ id: "print-1", status: "CORRIENDO", printerId: "printer-1" })],
+      [makeOrderPrint({ id: "link-1", printJobId: "print-1" })],
+      { "print-1": "CORRIENDO" },
+      [makePrinter({ id: "printer-1", status: "IMPRIMIENDO" })]
+    );
+
+    await expectBusinessError(() => printerService.updateStatus("printer-1", "MANTENIMIENTO"), "PRINTER_HAS_ACTIVE_PRINT");
+
+    await service.cancel("print-1");
+    expect((await printerRepository.findById("printer-1"))?.status).toBe("LISTA");
+
+    const maintained = await printerService.updateStatus("printer-1", "MANTENIMIENTO");
+    expect(maintained.status).toBe("MANTENIMIENTO");
   });
 
   it("soft deletes non-running print jobs, unlinks them from orders and rejects running deletes", async () => {

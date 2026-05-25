@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-Version change: template -> 1.0.0
+Version change: 1.0.0 -> 1.0.1
 Modified principles:
 - [PRINCIPLE_1_NAME] -> I. Cero Codigo Huerfano
 - [PRINCIPLE_2_NAME] -> II. Arquitectura por Capas Estrictas
@@ -10,12 +10,9 @@ Added sections:
 - Technical Standards
 - Delivery Workflow
 Removed sections:
-- Placeholder principle 5 from template
+- none
 Templates requiring updates:
-- .specify/templates/plan-template.md: pending review/update
-- .specify/templates/spec-template.md: pending review/update
-- .specify/templates/tasks-template.md: pending review/update
-- .specify/templates/commands/*.md: not present; extension commands reviewed
+- none
 Follow-up TODOs: none
 -->
 # Nilo Gestion de Impresiones Constitution
@@ -138,6 +135,11 @@ alcance, estructura de archivos, dependencias, reglas aplicables, validaciones,
 errores esperados y estrategia de testing. Las tareas MUST organizarse de forma
 trazable por historia, regla o criterio de aceptacion.
 
+Al cerrar un trabajo significativo, el agente MUST registrar un historial breve
+en `.specify/memory` del proyecto con el caso de uso, el plan seguido, la
+implementacion realizada y la verificacion ejecutada. Ese historial forma parte
+del rastro operativo del proyecto y no reemplaza la spec ni el plan.
+
 Antes de codear, el Constitution Check del plan MUST confirmar:
 
 - No hay trabajo fuera de spec.
@@ -170,4 +172,4 @@ Cada plan, task list y revision de codigo MUST verificar cumplimiento
 constitucional. Si una spec contradice esta constitucion, la spec MUST
 corregirse o la constitucion MUST enmendarse antes de implementar.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-24 | **Last Amended**: 2026-05-24
+**Version**: 1.0.1 | **Ratified**: 2026-05-24 | **Last Amended**: 2026-05-24

@@ -14,6 +14,7 @@ export class InMemoryPrintJobRepository implements PrintJobRepository {
       onCreateOrderPrint?: (data: { orderId: string; printJobId: string }) => Promise<void> | void;
       onUpdateOrderPrint?: (id: string, data: { active?: boolean }) => Promise<void> | void;
       onStatusChange?: (printJobId: string, status: PrintJobStatus) => Promise<void> | void;
+      onReleasePrinter?: (printerId: string, status: "LISTA") => Promise<void> | void;
     } = {}
   ) {
     this.printJobs = [...initialPrintJobs];
@@ -40,6 +41,7 @@ export class InMemoryPrintJobRepository implements PrintJobRepository {
     const now = new Date();
     const printJob: PrintJob = {
       id: randomUUID(),
+      printerId: null,
       modelName: data.modelName,
       modelCode: data.modelCode ?? null,
       material: data.material ?? null,
@@ -82,6 +84,35 @@ export class InMemoryPrintJobRepository implements PrintJobRepository {
       await this.hooks.onStatusChange?.(id, data.status);
     }
     return updatedPrintJob;
+  }
+
+  async assignPrinter(id: string, printerId: string): Promise<PrintJob> {
+    const updated = await this.update(id, {
+      printerId,
+      status: "CORRIENDO",
+      startedAt: new Date()
+    });
+    return updated;
+  }
+
+  async updateAndReleasePrinter(
+    id: string,
+    data: UpdatePrintJobData & {
+      status?: PrintJobStatus;
+      startedAt?: Date | null;
+      finishedAt?: Date | null;
+      cancelledAt?: Date | null;
+      active?: boolean;
+    },
+    printerStatus?: "LISTA"
+  ): Promise<PrintJob> {
+    const current = this.printJobs.find((printJob) => printJob.id === id);
+    const updated = await this.update(id, { ...data, printerId: null });
+    if (current?.printerId && printerStatus) {
+      await this.hooks.onReleasePrinter?.(current.printerId, printerStatus);
+    }
+
+    return updated;
   }
 
   findActiveOrderPrintByPrintJobId(printJobId: string): Promise<OrderPrint | null> {

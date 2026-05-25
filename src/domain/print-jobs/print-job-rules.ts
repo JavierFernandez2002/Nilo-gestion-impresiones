@@ -81,6 +81,16 @@ export function assertPrintJobCanBeEdited(printJob: PrintJob): void {
   }
 }
 
+export function assertPrintJobCanBeAssigned(printJob: PrintJob): void {
+  if (!printJob.active) {
+    throw new BusinessError("PRINT_JOB_INACTIVE", "Inactive print jobs cannot be changed.");
+  }
+
+  if (printJob.status !== "PENDIENTE") {
+    throw new BusinessError("PRINT_JOB_CANNOT_BE_ASSIGNED", "Only pending print jobs can be assigned to a printer.");
+  }
+}
+
 export function assertPrintJobCanBeCancelled(printJob: PrintJob): void {
   if (!printJob.active) {
     throw new BusinessError("PRINT_JOB_INACTIVE", "Inactive print jobs cannot be changed.");

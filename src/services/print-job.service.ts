@@ -2,6 +2,7 @@ import { BusinessError } from "../domain/errors/business-error.js";
 import { Order } from "../domain/orders/order.js";
 import { CreatePrintJobData, PrintJob, PrintJobStatus, UpdatePrintJobData } from "../domain/print-jobs/print-job.js";
 import {
+  assertPrintJobCanBeAssigned,
   assertPrintJobCanBeCancelled,
   assertPrintJobCanBeDeleted,
   assertPrintJobCanBeEdited,
@@ -13,11 +14,13 @@ import {
 } from "../domain/print-jobs/print-job-rules.js";
 import { PrintJobRepository } from "../repositories/print-job.repository.js";
 import { OrderService } from "./order.service.js";
+import { PrinterService } from "./printer.service.js";
 
 export class PrintJobService {
   constructor(
     private readonly printJobRepository: PrintJobRepository,
-    private readonly orderService: OrderService
+    private readonly orderService: OrderService,
+    private readonly printerService: PrinterService
   ) {}
 
   list(filters: { status?: PrintJobStatus; active?: boolean; orderId?: string } = {}): Promise<PrintJob[]> {
@@ -95,14 +98,24 @@ export class PrintJobService {
     return this.printJobRepository.update(current.id, updateData);
   }
 
+  async assignPrinter(id: string, printerId: string): Promise<PrintJob> {
+    const current = await this.getById(id);
+    assertPrintJobCanBeAssigned(current);
+
+    const printer = await this.printerService.getById(printerId);
+    this.printerService.assertCanReceivePrint(printer);
+
+    return this.printJobRepository.assignPrinter(current.id, printer.id);
+  }
+
   async cancel(id: string): Promise<PrintJob> {
     const current = await this.getById(id);
     assertPrintJobCanBeCancelled(current);
 
-    const cancelledPrintJob = await this.printJobRepository.update(current.id, {
+    const cancelledPrintJob = await this.printJobRepository.updateAndReleasePrinter(current.id, {
       status: "CANCELADA",
       cancelledAt: new Date()
-    });
+    }, "LISTA");
     await this.recalculateLinkedOrder(current.id);
     return cancelledPrintJob;
   }
@@ -111,10 +124,10 @@ export class PrintJobService {
     const current = await this.getById(id);
     assertPrintJobCanBeFinished(current);
 
-    const finishedPrintJob = await this.printJobRepository.update(current.id, {
+    const finishedPrintJob = await this.printJobRepository.updateAndReleasePrinter(current.id, {
       status: "FINALIZADA",
       finishedAt: new Date()
-    });
+    }, "LISTA");
     await this.recalculateLinkedOrder(current.id);
     return finishedPrintJob;
   }

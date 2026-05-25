@@ -43,6 +43,11 @@ export const updatePrintJobSchema = z.object({
   observations: optionalInput
 }).strict();
 
+export const assignPrinterSchema = z.object({
+  printerId: z.string().trim().min(1)
+}).strict();
+
 export type ListPrintJobsQueryInput = z.infer<typeof listPrintJobsQuerySchema>;
 export type CreatePrintJobInput = z.infer<typeof createPrintJobSchema>;
 export type UpdatePrintJobInput = z.infer<typeof updatePrintJobSchema>;
+export type AssignPrinterInput = z.infer<typeof assignPrinterSchema>;

@@ -113,6 +113,34 @@ describe("PrinterService", () => {
     expect(availablePrinters[0]?.id).toBe("ready");
   });
 
+  it("moves a ready printer into maintenance while keeping it active", async () => {
+    const repository = new InMemoryPrinterRepository([makePrinter({ id: "printer-1", status: "LISTA", active: true })]);
+    const service = new PrinterService(repository);
+
+    const printer = await service.updateStatus("printer-1", "MANTENIMIENTO");
+
+    expect(printer.id).toBe("printer-1");
+    expect(printer.status).toBe("MANTENIMIENTO");
+    expect(printer.active).toBe(true);
+  });
+
+  it("returns a maintenance printer to ready status", async () => {
+    const repository = new InMemoryPrinterRepository([makePrinter({ id: "printer-1", status: "MANTENIMIENTO" })]);
+    const service = new PrinterService(repository);
+
+    const printer = await service.updateStatus("printer-1", "LISTA");
+
+    expect(printer.status).toBe("LISTA");
+    expect(printer.active).toBe(true);
+  });
+
+  it("does not allow inactive printers to change status", async () => {
+    const repository = new InMemoryPrinterRepository([makePrinter({ id: "printer-1", active: false })]);
+    const service = new PrinterService(repository);
+
+    await expectBusinessError(() => service.updateStatus("printer-1", "MANTENIMIENTO"), "PRINTER_INACTIVE");
+  });
+
   it("does not allow manually changing a printer to printing", async () => {
     const repository = new InMemoryPrinterRepository([makePrinter()]);
     const service = new PrinterService(repository);
@@ -125,6 +153,13 @@ describe("PrinterService", () => {
     const service = new PrinterService(repository);
 
     await expectBusinessError(() => service.updateStatus("printer-1", "MANTENIMIENTO"), "PRINTER_HAS_ACTIVE_PRINT");
+  });
+
+  it("does not allow manually returning a printing printer to ready", async () => {
+    const repository = new InMemoryPrinterRepository([makePrinter({ status: "IMPRIMIENDO" })]);
+    const service = new PrinterService(repository);
+
+    await expectBusinessError(() => service.updateStatus("printer-1", "LISTA"), "PRINTER_HAS_ACTIVE_PRINT");
   });
 
   it("does not allow deleting a printing printer", async () => {

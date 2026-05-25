@@ -4,6 +4,7 @@ export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
 
 export interface PrintJob {
   id: string;
+  printerId: string | null;
   modelName: string;
   modelCode: string | null;
   material: string | null;
@@ -21,6 +22,7 @@ export interface PrintJob {
 
 export interface CreatePrintJobData {
   orderId: string;
+  printerId?: string | null;
   modelName: string;
   modelCode?: string | null;
   material?: string | null;
@@ -30,6 +32,7 @@ export interface CreatePrintJobData {
 }
 
 export interface UpdatePrintJobData {
+  printerId?: string | null;
   modelName?: string;
   modelCode?: string | null;
   material?: string | null;

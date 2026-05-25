@@ -39,6 +39,7 @@ model Printer {
   active         Boolean       @default(true)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  printJobs      PrintJob[]
 
   @@index([active])
   @@index([normalizedName])
@@ -85,6 +86,7 @@ model OrderPrint {
 
 model PrintJob {
   id                     String         @id @default(uuid())
+  printerId              String?
   modelName              String
   modelCode              String?
   material               String?
@@ -98,8 +100,10 @@ model PrintJob {
   active                 Boolean        @default(true)
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
+  printer                Printer?       @relation(fields: [printerId], references: [id])
   orderLinks             OrderPrint[]
 
   @@index([active])
   @@index([status])
+  @@index([printerId])
 }
